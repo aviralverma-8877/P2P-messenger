@@ -151,7 +151,7 @@ def navigate_phone_to_ble_pairing_screen(adb: Adb) -> None:
     adb.run("shell", "am", "start", "-n", "com.p2pmessenger/.MainActivity")
     time.sleep(3)
     adb.tap_text_until("Add contact", verify_text="SMS (far away)")
-    adb.tap_text_until("Bluetooth (nearby)", verify_text="Bluetooth pairing")
+    adb.tap_text_until("Bluetooth (nearby)", verify_text="Broadcasting and scanning")
     time.sleep(1)
     print("[phone] Should now be advertising + scanning + hosting its BLE GATT server.")
 

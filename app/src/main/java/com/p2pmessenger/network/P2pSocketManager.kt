@@ -16,6 +16,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.IOException
 import java.net.Inet6Address
@@ -94,23 +95,30 @@ class P2pSocketManager @Inject constructor(
         _connectionState.value = emptyMap()
     }
 
-    /** Opens (or reuses) a direct connection to a contact and sends our HELLO. */
-    suspend fun connect(signalName: String, ipv6Address: String, port: Int): Boolean {
-        connections[signalName]?.takeIf { it.socket.isConnected && !it.socket.isClosed }?.let { return true }
-        return try {
-            val socket = Socket()
-            socket.connect(InetSocketAddress(InetAddress.getByName(ipv6Address), port), 10_000)
-            val connection = registerConnection(signalName, socket)
-            val ownName = signalSessionManager.ownSignalName()
-            connection.writeMutex.withLock {
-                MessageFraming.writeFrame(socket.getOutputStream(), FrameKind.HELLO, ownName.toByteArray(Charsets.UTF_8))
+    /**
+     * Opens (or reuses) a direct connection to a contact and sends our HELLO. Being a `suspend`
+     * function doesn't by itself move the blocking `Socket.connect()` call off the caller's
+     * thread -- without this explicit dispatch, a caller on `Dispatchers.Main` (as
+     * [com.p2pmessenger.repository.PairingRepository.acceptPairing] is, via `viewModelScope`)
+     * crashes with `NetworkOnMainThreadException`.
+     */
+    suspend fun connect(signalName: String, ipv6Address: String, port: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            connections[signalName]?.takeIf { it.socket.isConnected && !it.socket.isClosed }?.let { return@withContext true }
+            try {
+                val socket = Socket()
+                socket.connect(InetSocketAddress(InetAddress.getByName(ipv6Address), port), 10_000)
+                val connection = registerConnection(signalName, socket)
+                val ownName = signalSessionManager.ownSignalName()
+                connection.writeMutex.withLock {
+                    MessageFraming.writeFrame(socket.getOutputStream(), FrameKind.HELLO, ownName.toByteArray(Charsets.UTF_8))
+                }
+                scope.launch { readLoop(signalName, socket) }
+                true
+            } catch (e: IOException) {
+                false
             }
-            scope.launch { readLoop(signalName, socket) }
-            true
-        } catch (e: IOException) {
-            false
         }
-    }
 
     fun disconnect(signalName: String) {
         connections.remove(signalName)?.socket?.closeQuietly()
