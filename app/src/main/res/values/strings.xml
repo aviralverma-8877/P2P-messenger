@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">P2P Messenger</string>
+    <string name="p2p_service_channel_name">P2P Connection</string>
+    <string name="p2p_service_notification_title">P2P Messenger is running</string>
+    <string name="p2p_service_notification_text">Listening for direct connections from your contacts</string>
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Two overlapping nodes standing in for "peer to peer" -->
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M34,40 m-14,0 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M74,68 m-14,0 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    <path
+        android:fillColor="@color/launcher_foreground"
+        android:pathData="M36,50 L62,64 L58,71 L32,57 Z" />
+</vector>

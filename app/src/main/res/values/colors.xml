@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="launcher_background">#F4F4F6</color>
+    <!-- Used only by the notification small-icon vector (drawable/ic_launcher_foreground.xml),
+         not the app launcher icon anymore; that's the bitmap in mipmap-xxxhdpi now. -->
+    <color name="launcher_foreground">#FFFFFF</color>
+</resources>
