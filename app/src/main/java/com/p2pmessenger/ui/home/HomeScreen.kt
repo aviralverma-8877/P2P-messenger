@@ -15,12 +15,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SyncProblem
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Divider
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -33,10 +37,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.p2pmessenger.data.ContactEntity
 import com.p2pmessenger.network.Ipv6Status
+import com.p2pmessenger.ui.theme.ColorScheme_Danger
+import com.p2pmessenger.ui.theme.ColorScheme_Success
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,7 +60,7 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("P2P Messenger") },
+                title = { Text("Messages", fontWeight = FontWeight.SemiBold) },
                 actions = {
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -68,12 +75,9 @@ fun HomeScreen(
         },
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            Ipv6StatusBanner(ipv6Status)
-            Divider()
+            ConnectivityBanner(ipv6Status)
             if (contacts.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No contacts yet -- tap + to pair with someone nearby (BLE) or far away (SMS).")
-                }
+                EmptyState()
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(contacts, key = { it.id }) { contact ->
@@ -82,7 +86,7 @@ fun HomeScreen(
                             isConnected = connectionState[contact.signalName] == true,
                             onClick = { onOpenChat(contact.id) },
                         )
-                        Divider()
+                        Divider(modifier = Modifier.padding(start = 72.dp))
                     }
                 }
             }
@@ -91,45 +95,112 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Ipv6StatusBanner(status: Ipv6Status) {
-    val (color, text) = when (status) {
-        is Ipv6Status.Checking -> MaterialTheme.colorScheme.surfaceVariant to "Checking IPv6 support..."
-        is Ipv6Status.Available -> Color(0xFF1E8E3E) to "IPv6 ready: ${status.address}"
-        is Ipv6Status.Unavailable -> Color(0xFFD93025) to
-            "No global IPv6 address on this network -- direct connections won't work until you're on a network that supports it."
+private fun ConnectivityBanner(status: Ipv6Status) {
+    val (icon, color, text) = when (status) {
+        is Ipv6Status.Checking -> Triple(
+            Icons.Default.Wifi,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            "Checking your connection...",
+        )
+        is Ipv6Status.Available -> Triple(
+            Icons.Default.Wifi,
+            ColorScheme_Success,
+            "You're ready to connect",
+        )
+        is Ipv6Status.Unavailable -> Triple(
+            Icons.Default.SyncProblem,
+            ColorScheme_Danger,
+            "Direct connections aren't available on this network",
+        )
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(color.copy(alpha = 0.15f))
-            .padding(12.dp),
+            .background(color.copy(alpha = 0.10f))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(color),
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+        Text(
+            text,
+            modifier = Modifier.padding(start = 10.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
         )
-        Text(text, modifier = Modifier.padding(start = 8.dp), color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun EmptyState() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.People,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(32.dp),
+                )
+            }
+            Text(
+                "No conversations yet",
+                modifier = Modifier.padding(top = 16.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "Tap + to add someone nearby or invite a friend by text message.",
+                modifier = Modifier.padding(top = 4.dp, start = 32.dp, end = 32.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
     }
 }
 
 @Composable
 private fun ContactRow(contact: ContactEntity, isConnected: Boolean, onClick: () -> Unit) {
     ListItem(
-        headlineContent = { Text(contact.displayName) },
-        supportingContent = { Text(if (isConnected) "Connected" else "Offline") },
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(if (isConnected) Color(0xFF1E8E3E) else Color.Gray),
-            )
-        },
+        headlineContent = { Text(contact.displayName, fontWeight = FontWeight.Medium) },
+        supportingContent = { Text(if (isConnected) "Connected" else "Not connected") },
+        leadingContent = { ContactAvatar(contact.displayName, isConnected) },
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
     )
+}
+
+@Composable
+private fun ContactAvatar(displayName: String, isConnected: Boolean) {
+    Box {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                displayName.trim().take(1).uppercase().ifEmpty { "?" },
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .align(Alignment.BottomEnd)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(1.5.dp)
+                .background(if (isConnected) ColorScheme_Success else Color.Gray, CircleShape),
+        )
+    }
 }

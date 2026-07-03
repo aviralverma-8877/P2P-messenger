@@ -8,6 +8,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.p2pmessenger.network.P2pConnectionForegroundService
 import com.p2pmessenger.ui.P2PMessengerNavHost
 import com.p2pmessenger.ui.PermissionsUtil
@@ -16,8 +19,17 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    private var pendingInviteLink by mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingInviteLink = intent.dataString
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingInviteLink = intent?.dataString
         setContent {
             P2PMessengerTheme {
                 val permissionLauncher = rememberLauncherForActivityResult(
@@ -40,7 +52,10 @@ class MainActivity : ComponentActivity() {
                     permissionLauncher.launch(PermissionsUtil.all)
                 }
 
-                P2PMessengerNavHost()
+                P2PMessengerNavHost(
+                    pendingInviteLink = pendingInviteLink,
+                    onInviteLinkConsumed = { pendingInviteLink = null },
+                )
             }
         }
     }

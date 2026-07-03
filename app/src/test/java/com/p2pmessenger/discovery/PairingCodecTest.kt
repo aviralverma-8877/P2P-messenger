@@ -41,18 +41,18 @@ class PairingCodecTest {
     }
 
     @Test
-    fun `sms encoding round-trips through the marker prefix`() {
+    fun `share link encoding round-trips through the deep link prefix`() {
         val payload = PairingCodec.toPayload("Bob", "deadbeef", "2001:db8::2", 47321, sampleBundle())
-        val sms = PairingCodec.encodeForSms(payload)
+        val link = PairingCodec.encodeForShare(payload)
 
-        assertTrue(sms.startsWith(PairingCodec.SMS_MARKER))
-        val decoded = PairingCodec.decodeFromSms(sms)
+        assertTrue(link.startsWith("${PairingCodec.DEEP_LINK_SCHEME}://${PairingCodec.DEEP_LINK_HOST}?d="))
+        val decoded = PairingCodec.decodeFromShareLink(link)
         assertEquals(payload, decoded)
     }
 
     @Test
-    fun `sms decoding ignores messages without our marker`() {
-        assertEquals(null, PairingCodec.decodeFromSms("hey, are we still on for lunch?"))
+    fun `share link decoding ignores links that aren't ours`() {
+        assertEquals(null, PairingCodec.decodeFromShareLink("https://example.com/not-an-invite"))
     }
 
     @Test

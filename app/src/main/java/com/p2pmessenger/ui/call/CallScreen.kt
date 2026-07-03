@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -20,14 +23,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 /**
- * Video calling is scaffolded but not wired up end-to-end yet (see [com.p2pmessenger.call.WebRtcClient]
- * and [com.p2pmessenger.call.CallSignalingChannel] for the pieces already in place: SDP/ICE
- * exchange over the encrypted P2P socket, and a `PeerConnectionFactory` with no ICE servers).
- * This screen is an honest placeholder rather than a fake working call UI.
+ * Video calling isn't wired up end-to-end yet -- see [com.p2pmessenger.call.WebRtcClient] and
+ * [com.p2pmessenger.call.CallSignalingChannel] for the transport pieces already in place. This
+ * is an honest "coming soon" placeholder rather than a fake working call UI.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,20 +56,30 @@ fun CallScreen(onBack: () -> Unit, viewModel: CallViewModel = hiltViewModel()) {
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(bottom = 24.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    "Video calling isn't wired up in this build yet.\n\n" +
-                        "The transport is ready (WebRTC with no STUN/TURN, signaling over the " +
-                        "same encrypted P2P socket as messages) -- local/remote camera capture " +
-                        "and the offer/answer flow are the next things to build.",
-                    modifier = Modifier.padding(16.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                Icon(
+                    Icons.Default.Videocam,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(40.dp),
                 )
             }
+            Text(
+                "Video calling is coming soon",
+                modifier = Modifier.padding(top = 20.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                "We're putting the finishing touches on private, direct video calls.",
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
             Button(onClick = onBack) { Text("Back to chat") }
         }
     }

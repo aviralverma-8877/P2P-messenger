@@ -52,6 +52,10 @@ class P2pSocketManager @Inject constructor(
     /** (signalName of sender, decrypted message). */
     val incomingMessages: SharedFlow<Pair<String, WireMessage>> = _incomingMessages.asSharedFlow()
 
+    private val _incomingFileChunks = MutableSharedFlow<Pair<String, FileChunkFraming.Chunk>>(extraBufferCapacity = 64)
+    /** (signalName of sender, decrypted chunk) -- consumed by [com.p2pmessenger.media.MediaTransferManager]. */
+    val incomingFileChunks: SharedFlow<Pair<String, FileChunkFraming.Chunk>> = _incomingFileChunks.asSharedFlow()
+
     private val _connectionState = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val connectionState: StateFlow<Map<String, Boolean>> = _connectionState.asStateFlow()
 
@@ -142,6 +146,24 @@ class P2pSocketManager @Inject constructor(
         }
     }
 
+    /** Sends one chunk of an in-progress file transfer, encrypted the same way [send] encrypts a [WireMessage]. */
+    suspend fun sendFileChunk(signalName: String, fileId: String, chunkIndex: Int, totalChunks: Int, data: ByteArray): Boolean {
+        val connection = connections[signalName] ?: return false
+        return try {
+            val plaintext = FileChunkFraming.encode(fileId, chunkIndex, totalChunks, data)
+            val envelope = signalSessionManager.encrypt(signalName, SIGNAL_DEVICE_ID, plaintext)
+            val framePayload = byteArrayOf(envelope.type.toByte()) + envelope.ciphertext
+            connection.writeMutex.withLock {
+                MessageFraming.writeFrame(connection.socket.getOutputStream(), FrameKind.FILE_CHUNK, framePayload)
+            }
+            true
+        } catch (e: IOException) {
+            connections.remove(signalName)
+            _connectionState.value = _connectionState.value + (signalName to false)
+            false
+        }
+    }
+
     private suspend fun handleAcceptedSocket(socket: Socket) {
         try {
             val first = MessageFraming.readFrame(socket.getInputStream())
@@ -170,16 +192,34 @@ class P2pSocketManager @Inject constructor(
             val input = socket.getInputStream()
             while (true) {
                 val frame = MessageFraming.readFrame(input) ?: break
-                if (frame.kind != FrameKind.MESSAGE || frame.payload.isEmpty()) continue
-                val envelopeType = frame.payload[0].toInt()
-                val ciphertext = frame.payload.copyOfRange(1, frame.payload.size)
-                val plaintext = signalSessionManager.decrypt(
-                    signalName,
-                    SIGNAL_DEVICE_ID,
-                    EncryptedEnvelope(envelopeType, ciphertext),
-                )
-                val message = json.decodeFromString(WireMessage.serializer(), plaintext.toString(Charsets.UTF_8))
-                _incomingMessages.emit(signalName to message)
+                if (frame.payload.isEmpty()) continue
+                when (frame.kind) {
+                    FrameKind.MESSAGE -> {
+                        val envelopeType = frame.payload[0].toInt()
+                        val ciphertext = frame.payload.copyOfRange(1, frame.payload.size)
+                        val plaintext = signalSessionManager.decrypt(
+                            signalName,
+                            SIGNAL_DEVICE_ID,
+                            EncryptedEnvelope(envelopeType, ciphertext),
+                        )
+                        val message = json.decodeFromString(WireMessage.serializer(), plaintext.toString(Charsets.UTF_8))
+                        _incomingMessages.emit(signalName to message)
+                    }
+                    FrameKind.FILE_CHUNK -> {
+                        val envelopeType = frame.payload[0].toInt()
+                        val ciphertext = frame.payload.copyOfRange(1, frame.payload.size)
+                        val plaintext = signalSessionManager.decrypt(
+                            signalName,
+                            SIGNAL_DEVICE_ID,
+                            EncryptedEnvelope(envelopeType, ciphertext),
+                        )
+                        _incomingFileChunks.emit(signalName to FileChunkFraming.decode(plaintext))
+                    }
+                    else -> {
+                        // HELLO only makes sense as the very first frame on a connection (handled
+                        // in connect()/handleAcceptedSocket) -- ignore stray/unknown kinds here.
+                    }
+                }
             }
         } catch (e: IOException) {
             // connection dropped -- reconnect is the caller's responsibility (see ContactRepository)

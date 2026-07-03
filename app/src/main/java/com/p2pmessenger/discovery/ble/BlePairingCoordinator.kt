@@ -24,7 +24,7 @@ import javax.inject.Singleton
  *
  * Both paths hand their result straight to [PairingRepository.onIncomingPairing] -- that's the
  * single flow [com.p2pmessenger.ui.addcontact.AddContactViewModel] actually listens to (the same
- * one [com.p2pmessenger.discovery.sms.SmsPairingReceiver] feeds for SMS pairing). This class used
+ * one [com.p2pmessenger.ui.InviteLinkViewModel] feeds for shared-link pairing). This class used
  * to keep its own separate `incomingPairings` flow that nothing was ever collecting, which meant
  * a device that discovered a peer over BLE decoded and replied to their bundle correctly but
  * never actually created the contact on its own side -- BLE pairing only completed for the

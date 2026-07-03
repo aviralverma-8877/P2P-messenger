@@ -1,11 +1,14 @@
 package com.p2pmessenger.pcclient
 
 import kotlinx.serialization.json.Json
+import java.io.File
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URLConnection
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import kotlin.system.exitProcess
@@ -20,11 +23,13 @@ import kotlin.system.exitProcess
  *   PAIR <json pairing payload> -> establishes the Signal session + connects to the peer's
  *                                  IPv6 socket; prints "PAIRED <signalName>" or "PAIR_FAILED <reason>"
  *   SEND <text>                -> encrypts and sends a text message to the paired peer; prints "SENT"
+ *   SEND_FILE <path>           -> encrypts and sends the local file in chunks; prints "FILE_SENT" or "FILE_SEND_FAILED <reason>"
  *   QUIT                       -> exits
  *
  * Output lines you should watch for:
  *   READY <port> <ipv6>        -> listening socket is up
  *   RECV <text>                -> a decrypted message arrived from the peer
+ *   RECV_FILE <path> <size>    -> a file finished reassembling and was written to disk
  *   LOG <message>               -> diagnostics
  */
 private const val LISTEN_PORT = 47321
@@ -34,6 +39,12 @@ private val session = SignalSession()
 private var peerSignalName: String? = null
 private var peerSocket: Socket? = null
 private val writeLock = Any()
+private val receivedFilesDir = File("received_files").apply { mkdirs() }
+
+private class IncomingTransfer(val fileName: String, val mimeType: String, val sizeBytes: Long, val tempFile: File) {
+    var chunksReceived = 0
+}
+private val incomingTransfers = ConcurrentHashMap<String, IncomingTransfer>()
 
 fun main() {
     val ownIpv6 = findOwnGlobalIpv6()
@@ -64,6 +75,7 @@ fun main() {
         when {
             trimmed == "GET_BUNDLE" -> handleGetBundle(ownIpv6)
             trimmed.startsWith("PAIR ") -> handlePair(trimmed.removePrefix("PAIR ").trim())
+            trimmed.startsWith("SEND_FILE ") -> handleSendFile(trimmed.removePrefix("SEND_FILE ").trim())
             trimmed.startsWith("SEND ") -> handleSend(trimmed.removePrefix("SEND "))
             trimmed == "QUIT" -> exitProcess(0)
             trimmed.isEmpty() -> Unit
@@ -129,6 +141,58 @@ private fun handleSend(text: String) {
     }
 }
 
+private fun handleSendFile(path: String) {
+    val name = peerSignalName
+    val socket = peerSocket
+    if (name == null || socket == null) {
+        println("FILE_SEND_FAILED not paired yet")
+        return
+    }
+    val file = File(path)
+    if (!file.isFile) {
+        println("FILE_SEND_FAILED no such file: $path")
+        return
+    }
+    try {
+        val fileId = UUID.randomUUID().toString()
+        val mimeType = URLConnection.guessContentTypeFromName(file.name) ?: "application/octet-stream"
+        val meta = WireMessage.FileMeta(fileId, file.name, mimeType, file.length())
+        val metaPlaintext = json.encodeToString(WireMessage.serializer(), meta).toByteArray(Charsets.UTF_8)
+        val metaEnvelope = session.encrypt(name, SIGNAL_DEVICE_ID, metaPlaintext)
+        synchronized(writeLock) {
+            MessageFraming.writeFrame(
+                socket.getOutputStream(),
+                FrameKind.MESSAGE,
+                byteArrayOf(metaEnvelope.type.toByte()) + metaEnvelope.ciphertext,
+            )
+        }
+
+        val chunkSize = FileChunkFraming.CHUNK_SIZE
+        val totalChunks = ((file.length() + chunkSize - 1) / chunkSize).toInt().coerceAtLeast(1)
+        file.inputStream().use { input ->
+            val buffer = ByteArray(chunkSize)
+            var index = 0
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                val chunkPlaintext = FileChunkFraming.encode(fileId, index, totalChunks, buffer.copyOf(read))
+                val chunkEnvelope = session.encrypt(name, SIGNAL_DEVICE_ID, chunkPlaintext)
+                synchronized(writeLock) {
+                    MessageFraming.writeFrame(
+                        socket.getOutputStream(),
+                        FrameKind.FILE_CHUNK,
+                        byteArrayOf(chunkEnvelope.type.toByte()) + chunkEnvelope.ciphertext,
+                    )
+                }
+                index++
+            }
+        }
+        println("FILE_SENT")
+    } catch (e: Exception) {
+        println("FILE_SEND_FAILED ${e.message}")
+    }
+}
+
 private fun handleIncomingConnection(socket: Socket) {
     try {
         val first = MessageFraming.readFrame(socket.getInputStream()) ?: return
@@ -148,15 +212,44 @@ private fun readLoop(remoteName: String, socket: Socket) {
         val input = socket.getInputStream()
         while (true) {
             val frame = MessageFraming.readFrame(input) ?: break
-            if (frame.kind != FrameKind.MESSAGE || frame.payload.isEmpty()) continue
-            val envelopeType = frame.payload[0].toInt()
-            val ciphertext = frame.payload.copyOfRange(1, frame.payload.size)
-            val plaintext = session.decrypt(remoteName, SIGNAL_DEVICE_ID, EncryptedEnvelope(envelopeType, ciphertext))
-            val message = json.decodeFromString(WireMessage.serializer(), plaintext.toString(Charsets.UTF_8))
-            if (message is WireMessage.Text) {
-                println("RECV ${message.body}")
-            } else {
-                println("LOG received non-text message: $message")
+            if (frame.payload.isEmpty()) continue
+            when (frame.kind) {
+                FrameKind.MESSAGE -> {
+                    val envelopeType = frame.payload[0].toInt()
+                    val ciphertext = frame.payload.copyOfRange(1, frame.payload.size)
+                    val plaintext = session.decrypt(remoteName, SIGNAL_DEVICE_ID, EncryptedEnvelope(envelopeType, ciphertext))
+                    val message = json.decodeFromString(WireMessage.serializer(), plaintext.toString(Charsets.UTF_8))
+                    when (message) {
+                        is WireMessage.Text -> println("RECV ${message.body}")
+                        is WireMessage.FileMeta -> {
+                            val tempFile = File.createTempFile("incoming_", ".part")
+                            incomingTransfers[message.id] = IncomingTransfer(message.fileName, message.mimeType, message.sizeBytes, tempFile)
+                            println("LOG incoming file: ${message.fileName} (${message.sizeBytes} bytes)")
+                        }
+                        else -> println("LOG received non-text message: $message")
+                    }
+                }
+                FrameKind.FILE_CHUNK -> {
+                    val envelopeType = frame.payload[0].toInt()
+                    val ciphertext = frame.payload.copyOfRange(1, frame.payload.size)
+                    val plaintext = session.decrypt(remoteName, SIGNAL_DEVICE_ID, EncryptedEnvelope(envelopeType, ciphertext))
+                    val chunk = FileChunkFraming.decode(plaintext)
+                    val transfer = incomingTransfers[chunk.fileId]
+                    if (transfer == null) {
+                        println("LOG file chunk for unknown transfer ${chunk.fileId}, dropping")
+                    } else {
+                        transfer.tempFile.appendBytes(chunk.data)
+                        transfer.chunksReceived++
+                        if (transfer.chunksReceived >= chunk.totalChunks) {
+                            incomingTransfers.remove(chunk.fileId)
+                            val finalFile = File(receivedFilesDir, transfer.fileName)
+                            transfer.tempFile.copyTo(finalFile, overwrite = true)
+                            transfer.tempFile.delete()
+                            println("RECV_FILE ${finalFile.absolutePath} ${finalFile.length()}")
+                        }
+                    }
+                }
+                else -> println("LOG unknown frame kind ${frame.kind}")
             }
         }
     } catch (e: Exception) {

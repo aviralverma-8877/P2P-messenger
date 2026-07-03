@@ -4,11 +4,11 @@ import kotlinx.serialization.Serializable
 
 /**
  * Everything needed to start talking to a new peer directly: their Signal prekey bundle
- * (public material only) plus where to reach them over IPv6. This is what gets sent as an
- * SMS body or written to a BLE GATT characteristic during pairing.
+ * (public material only) plus where to reach them over IPv6. This is what gets embedded in a
+ * shared invite link or written to a BLE GATT characteristic during pairing.
  *
  * All key material is Base64 rather than raw bytes so this serializes cleanly to/from the
- * text-based SMS transport; the BLE path uses the same JSON encoded as UTF-8.
+ * text-based invite link; the BLE path uses the same JSON encoded as UTF-8.
  */
 @Serializable
 data class PairingPayload(

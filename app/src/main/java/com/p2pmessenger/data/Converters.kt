@@ -8,6 +8,14 @@ enum class MessageType { TEXT, IMAGE, VIDEO, FILE, CALL_EVENT }
 
 enum class MessageStatus { SENDING, SENT, DELIVERED, READ, FAILED, RECEIVED }
 
+/** [MessageStatus.SENDING] doubles as "transfer in progress" for both directions -- callers tell
+ *  "Sending..." from "Receiving..." using [MessageEntity.direction], not a separate status. */
+fun messageTypeForMimeType(mimeType: String): MessageType = when {
+    mimeType.startsWith("image/") -> MessageType.IMAGE
+    mimeType.startsWith("video/") -> MessageType.VIDEO
+    else -> MessageType.FILE
+}
+
 class Converters {
     @TypeConverter
     fun directionToString(value: MessageDirection): String = value.name

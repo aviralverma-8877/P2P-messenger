@@ -133,6 +133,37 @@ sealed interface WireMessage {
 object FrameKind {
     const val HELLO: Byte = 0x01
     const val MESSAGE: Byte = 0x02
+    const val FILE_CHUNK: Byte = 0x03
+}
+
+/** Mirrors the app's `network/FileChunkFraming.kt` byte-for-byte. */
+object FileChunkFraming {
+    const val CHUNK_SIZE = 256 * 1024
+
+    data class Chunk(val fileId: String, val chunkIndex: Int, val totalChunks: Int, val data: ByteArray)
+
+    fun encode(fileId: String, chunkIndex: Int, totalChunks: Int, data: ByteArray): ByteArray {
+        val fileIdBytes = fileId.toByteArray(Charsets.UTF_8)
+        val buffer = java.io.ByteArrayOutputStream(fileIdBytes.size + data.size + 10)
+        val dos = DataOutputStream(buffer)
+        dos.writeShort(fileIdBytes.size)
+        dos.write(fileIdBytes)
+        dos.writeInt(chunkIndex)
+        dos.writeInt(totalChunks)
+        dos.write(data)
+        return buffer.toByteArray()
+    }
+
+    fun decode(bytes: ByteArray): Chunk {
+        val dis = DataInputStream(java.io.ByteArrayInputStream(bytes))
+        val idLength = dis.readUnsignedShort()
+        val idBytes = ByteArray(idLength)
+        dis.readFully(idBytes)
+        val chunkIndex = dis.readInt()
+        val totalChunks = dis.readInt()
+        val data = dis.readBytes()
+        return Chunk(String(idBytes, Charsets.UTF_8), chunkIndex, totalChunks, data)
+    }
 }
 
 data class Frame(val kind: Byte, val payload: ByteArray)

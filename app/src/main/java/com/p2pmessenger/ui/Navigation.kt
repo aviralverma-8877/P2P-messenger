@@ -1,6 +1,8 @@
 package com.p2pmessenger.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,7 +24,23 @@ private object Routes {
 }
 
 @Composable
-fun P2PMessengerNavHost(navController: NavHostController = rememberNavController()) {
+fun P2PMessengerNavHost(
+    navController: NavHostController = rememberNavController(),
+    pendingInviteLink: String? = null,
+    onInviteLinkConsumed: () -> Unit = {},
+) {
+    val inviteLinkViewModel: InviteLinkViewModel = hiltViewModel()
+    LaunchedEffect(pendingInviteLink) {
+        // Consuming (nulling out) pendingInviteLink recomposes this composable with a new key,
+        // which cancels this very effect -- so that must happen last, after the work is done,
+        // not first. Doing it first previously cancelled acceptInviteLink before it could run.
+        val link = pendingInviteLink ?: return@LaunchedEffect
+        val contact = inviteLinkViewModel.acceptInviteLink(link)
+        contact?.let {
+            navController.navigate(Routes.chat(it.id)) { popUpTo(Routes.HOME) }
+        }
+        onInviteLinkConsumed()
+    }
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(

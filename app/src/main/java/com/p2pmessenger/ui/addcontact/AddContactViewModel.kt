@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.p2pmessenger.data.ContactEntity
 import com.p2pmessenger.data.UserPreferences
+import com.p2pmessenger.discovery.PairingCodec
 import com.p2pmessenger.discovery.ble.BleDiscoveredPeer
 import com.p2pmessenger.discovery.ble.BlePairingCoordinator
-import com.p2pmessenger.discovery.sms.SmsPairingSender
 import com.p2pmessenger.repository.PairingRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +18,6 @@ import javax.inject.Inject
 @HiltViewModel
 class AddContactViewModel @Inject constructor(
     private val pairingRepository: PairingRepository,
-    private val smsPairingSender: SmsPairingSender,
     private val bleCoordinator: BlePairingCoordinator,
     private val userPreferences: UserPreferences,
 ) : ViewModel() {
@@ -42,15 +41,14 @@ class AddContactViewModel @Inject constructor(
         }
     }
 
-    fun sendViaSms(phoneNumber: String) {
-        viewModelScope.launch {
-            val payload = pairingRepository.buildOutgoingPayload(userPreferences.displayName.value)
-            if (payload == null) {
-                _error.value = "No global IPv6 address available -- check your network connection and try again."
-                return@launch
-            }
-            smsPairingSender.send(phoneNumber, payload)
+    /** Builds a shareable invite link, or null (with [error] set) if we have no IPv6 address yet. */
+    suspend fun buildShareLink(): String? {
+        val payload = pairingRepository.buildOutgoingPayload(userPreferences.displayName.value)
+        if (payload == null) {
+            _error.value = "No global IPv6 address available -- check your network connection and try again."
+            return null
         }
+        return PairingCodec.encodeForShare(payload)
     }
 
     fun startBlePairing() {

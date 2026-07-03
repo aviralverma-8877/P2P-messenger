@@ -26,12 +26,12 @@ class PairingRepository @Inject constructor(
     private val _incomingPairings = MutableSharedFlow<IncomingPairing>(extraBufferCapacity = 8)
     val incomingPairings: SharedFlow<IncomingPairing> = _incomingPairings.asSharedFlow()
 
-    /** Called by [com.p2pmessenger.discovery.sms.SmsPairingReceiver] and the BLE coordinator. */
+    /** Called by [com.p2pmessenger.ui.InviteLinkViewModel] and the BLE coordinator. */
     suspend fun onIncomingPairing(incoming: IncomingPairing) {
         _incomingPairings.emit(incoming)
     }
 
-    /** Builds the bundle we hand to a new contact via SMS or BLE. Null if we have no IPv6 address. */
+    /** Builds the bundle we hand to a new contact via a shared link or BLE. Null if we have no IPv6 address. */
     suspend fun buildOutgoingPayload(displayName: String): PairingPayload? {
         val ipv6 = ipv6Utils.currentGlobalIpv6Address() ?: return null
         val bundle = signalSessionManager.generateLocalKeyBundle()
@@ -51,8 +51,7 @@ class PairingRepository @Inject constructor(
             displayName = payload.displayName,
             signalName = payload.signalName,
             deviceId = payload.deviceId,
-            phoneNumber = existing?.phoneNumber
-                ?: incoming.originHint.takeIf { incoming.source == PairingSource.SMS },
+            phoneNumber = existing?.phoneNumber,
             identityKeyPublic = bundle.identityKeyPublic,
             lastKnownIpv6 = payload.ipv6Address,
             lastKnownPort = payload.port,

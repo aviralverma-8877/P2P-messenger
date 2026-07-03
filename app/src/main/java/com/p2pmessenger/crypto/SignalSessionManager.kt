@@ -49,8 +49,8 @@ data class LocalKeyBundle(
 
 /**
  * Runs the Signal Protocol (X3DH/PQXDH handshake + Double Ratchet) entirely offline: prekey
- * bundles are generated here and exchanged directly with a peer over BLE/SMS instead of being
- * fetched from Signal's servers. API calls here were verified against the real
+ * bundles are generated here and exchanged directly with a peer over BLE or a shared invite link
+ * instead of being fetched from Signal's servers. API calls here were verified against the real
  * `org.signal:libsignal-client:0.96.4` jar with `javap`, not guessed.
  *
  * Note that both [SessionBuilder] and [SessionCipher] need *our own* address as well as the
@@ -82,7 +82,7 @@ class SignalSessionManager @Inject constructor(
         return digest.joinToString("") { "%02x".format(it) }.take(16)
     }
 
-    /** Builds a fresh, single-use prekey bundle to hand to a new peer via BLE or SMS. */
+    /** Builds a fresh, single-use prekey bundle to hand to a new peer via BLE or a shared link. */
     suspend fun generateLocalKeyBundle(): LocalKeyBundle = withContext(Dispatchers.IO) {
         ensureIdentity()
         val identityKeyPair = store.identityKeyPair
@@ -133,7 +133,7 @@ class SignalSessionManager @Inject constructor(
     }
 
     /**
-     * Consumes a peer's [LocalKeyBundle] (received via BLE/SMS) and establishes an outbound
+     * Consumes a peer's [LocalKeyBundle] (received via BLE or a shared link) and establishes an outbound
      * Signal session with them -- the offline equivalent of fetching a prekey bundle from
      * Signal's server.
      */

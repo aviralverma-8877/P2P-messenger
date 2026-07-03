@@ -12,6 +12,14 @@ object FrameKind {
 
     /** payload = [1 byte Signal ciphertext type][remaining = ciphertext bytes]. */
     const val MESSAGE: Byte = 0x02
+
+    /**
+     * payload = [1 byte Signal ciphertext type][remaining = ciphertext bytes], same envelope
+     * shape as [MESSAGE] -- the plaintext underneath is a [FileChunkFraming]-encoded blob rather
+     * than a [WireMessage] JSON document, since per-chunk JSON+base64 overhead would meaningfully
+     * bloat large file transfers.
+     */
+    const val FILE_CHUNK: Byte = 0x03
 }
 
 data class Frame(val kind: Byte, val payload: ByteArray)

@@ -6,12 +6,13 @@ import java.util.Base64
 
 /**
  * Converts between our internal [LocalKeyBundle]/[PairingPayload] types and the wire formats
- * used for SMS (marker-prefixed JSON text, chunked into multipart SMS by Android itself) and
+ * used for sharing an invite link (any app the user picks from the Android share sheet) and
  * BLE GATT (raw UTF-8 JSON bytes, chunked to the negotiated MTU by [ble.BleGattClient]).
  */
 object PairingCodec {
-    /** Any inbound SMS not starting with this is ignored by [sms.SmsPairingReceiver]. */
-    const val SMS_MARKER = "P2PMSG1:"
+    const val DEEP_LINK_SCHEME = "p2pmessenger"
+    const val DEEP_LINK_HOST = "pair"
+    private const val DEEP_LINK_PREFIX = "$DEEP_LINK_SCHEME://$DEEP_LINK_HOST?d="
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -53,11 +54,20 @@ object PairingCodec {
         kyberPreKeySignature = payload.kyberPreKeySignature.fromBase64(),
     )
 
-    fun encodeForSms(payload: PairingPayload): String = SMS_MARKER + json.encodeToString(payload)
+    /** Encodes our payload into a link that opens straight to pairing when tapped in any app. */
+    fun encodeForShare(payload: PairingPayload): String {
+        val encoded = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(json.encodeToString(payload).toByteArray(Charsets.UTF_8))
+        return DEEP_LINK_PREFIX + encoded
+    }
 
-    fun decodeFromSms(body: String): PairingPayload? {
-        if (!body.startsWith(SMS_MARKER)) return null
-        return runCatching { json.decodeFromString<PairingPayload>(body.removePrefix(SMS_MARKER)) }.getOrNull()
+    fun decodeFromShareLink(link: String): PairingPayload? {
+        if (!link.startsWith(DEEP_LINK_PREFIX)) return null
+        val encoded = link.removePrefix(DEEP_LINK_PREFIX).substringBefore('&')
+        return runCatching {
+            val bytes = Base64.getUrlDecoder().decode(encoded)
+            json.decodeFromString<PairingPayload>(bytes.toString(Charsets.UTF_8))
+        }.getOrNull()
     }
 
     fun encodeForBle(payload: PairingPayload): ByteArray = json.encodeToString(payload).toByteArray(Charsets.UTF_8)
