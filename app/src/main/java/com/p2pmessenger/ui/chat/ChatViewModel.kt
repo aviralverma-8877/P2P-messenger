@@ -1,5 +1,6 @@
 package com.p2pmessenger.ui.chat
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -48,9 +49,30 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    fun sendFile(uri: Uri, fileName: String, mimeType: String) {
+        viewModelScope.launch {
+            _contact.value?.let { messageRepository.sendFile(it, uri, fileName, mimeType) }
+        }
+    }
+
     fun retryConnection() {
         viewModelScope.launch {
             _contact.value?.let { contactRepository.connectTo(it) }
+        }
+    }
+
+    fun clearConversation() {
+        viewModelScope.launch {
+            messageRepository.clearConversation(contactId)
+        }
+    }
+
+    fun deleteContact(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            val contact = _contact.value ?: return@launch
+            messageRepository.clearConversation(contactId)
+            contactRepository.delete(contact)
+            onDeleted()
         }
     }
 }

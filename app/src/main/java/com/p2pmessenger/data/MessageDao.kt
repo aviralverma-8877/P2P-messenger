@@ -17,6 +17,12 @@ interface MessageDao {
     @Query("UPDATE messages SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: String, status: MessageStatus)
 
+    @Query("UPDATE messages SET mediaUri = :mediaUri, status = :status WHERE id = :id")
+    suspend fun updateMedia(id: String, mediaUri: String, status: MessageStatus)
+
     @Query("SELECT * FROM messages WHERE contactId = :contactId ORDER BY timestampEpochMs DESC LIMIT 1")
     suspend fun latestForContact(contactId: String): MessageEntity?
+
+    @Query("DELETE FROM messages WHERE contactId = :contactId")
+    suspend fun deleteForContact(contactId: String)
 }

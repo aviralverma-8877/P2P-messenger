@@ -21,7 +21,10 @@ class ContactRepository @Inject constructor(
 
     suspend fun upsert(contact: ContactEntity) = contactDao.upsert(contact)
 
-    suspend fun delete(id: String) = contactDao.delete(id)
+    suspend fun delete(contact: ContactEntity) {
+        socketManager.disconnect(contact.signalName)
+        contactDao.delete(contact.id)
+    }
 
     /** Attempts a direct connection using the contact's last-known IPv6 address/port. */
     suspend fun connectTo(contact: ContactEntity): Boolean {
